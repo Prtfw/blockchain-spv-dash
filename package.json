@@ -31,7 +31,8 @@
     "object-assign": "^4.1.0",
     "setimmediate": "^1.0.4",
     "varstruct": "^5.1.0",
-    "varuint-bitcoin": "^1.0.4"
+    "varuint-bitcoin": "^1.0.4",
+    "dgw": "github:alex-werner/dark-gravity-wave-js"
   },
   "devDependencies": {
     "babel-cli": "^6.6.5",
