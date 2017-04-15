@@ -358,6 +358,7 @@ Blockchain.prototype._reorg = function (path, cb) {
 }
 
 Blockchain.prototype._addHeader = function (prev, header, cb) {
+  console.log('inside addheader repo')
   var height = prev.height + 1
   var block = {
     height: height,
@@ -385,13 +386,16 @@ Blockchain.prototype._addHeader = function (prev, header, cb) {
   if (header.prevHash.compare(prev.hash) !== 0) {
     return cb(new Error('Block does not connect to previous'), block)
   }
-  this.params.shouldRetarget(block, (err, retarget) => {
+  this.params.shouldRetarget(block, (err, retarget) => {  //always true but current call isn't always true
     if (err) return cb(err)
-    if (!retarget && header.bits !== prev.header.bits) {
+    // if (!retarget && header.bits !== prev.header.bits) { //OG
+    if (block.height < 25) { //
+
 
       // TODO
       // return cb(new Error('Unexpected difficulty change at height ' + height), block)
-
+       block.dgwBool = false
+       return cb(new Error('Unable to verify using dgw'), block)
     }
     this.validProof(header, (err, validProof) => {
       if (err) return cb(err)
