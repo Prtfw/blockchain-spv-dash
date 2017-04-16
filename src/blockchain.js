@@ -1,6 +1,12 @@
 'use strict';
 
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+var _typeof2 = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var _typeof = typeof Symbol === "function" && _typeof2(Symbol.iterator) === "symbol" ? function (obj) {
+  return typeof obj === "undefined" ? "undefined" : _typeof2(obj);
+} : function (obj) {
+  return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj === "undefined" ? "undefined" : _typeof2(obj);
+};
 
 var EventEmitter = require('events').EventEmitter;
 var async = require('async');
@@ -11,8 +17,8 @@ var to = require('flush-write-stream').obj;
 var inherits = require('inherits');
 var BlockStore = require('./blockStore.js');
 var HeaderStream = require('./headerStream.js');
-var dgw = require('./dgw.js');  //for testing only... comment out and use next line in prod.
-// var dgw = require('dgw'); //uncomment for prod.
+// var dgw = require('./dgw.js'); //for testing only... comment out and use next line in prod.
+var dgw = require('dark-gravity-wave-js'); //uncomment for prod.
 
 if (!setImmediate) require('setimmediate');
 
@@ -57,7 +63,10 @@ var Blockchain = module.exports = function (params, db, opts) {
   this.ready = false;
   this.closed = false;
   this.adding = false;
-  this.stack = [];   //!!!
+  this.stack = []; //!!!
+  this.stack.push(this._conv4dgw(params.genesisHeader))
+
+
 
   var indexInterval = params.interval;
   this.store = new BlockStore({ db: db, Block: Block, indexInterval: indexInterval });
@@ -329,7 +338,6 @@ Blockchain.prototype.addHeaders = function (headers, cb) {
     _this12.store.commit(function (err2) {
       if (err || err2) return cb(err || err2);
       _this12.emit('commit', headers);
-      // console.log('done adding headers -> headers added', headers, "last header:", last);
       cb(null, last);
     });
   };
@@ -400,43 +408,49 @@ Blockchain.prototype._reorg = function (path, cb) {
   put(path.fork);
 };
 
-Blockchain.prototype._dgwCheck = function (header, _stack){
-    var _this15 = this;
-    var stack = _stack || _this15.stack.slice(-25);
+Blockchain.prototype._dgwCheck = function (header, _stack) {
+  var _this15 = this;
+  var stack = _stack || _this15.stack.slice(-25);
 
-    if (stack<25){
-        // return cb(new Error('insufficient block height ' + height), block);
-        // console.log('insufficient block height')
-        return 0;
-    }else{
-        var dgwBits = dgw.darkGravityWaveTargetWithBlocks(stack).toString(16);
-        return header.hashBits == dgwBits ? 1 : 0;
+  if (stack.length < 25) {
+    // return cb(new Error('insufficient block height ' + height), block);
+    // console.log('insufficient block height')
+    return 0;
+  } else {
+    var dgwBits = dgw.darkGravityWaveTargetWithBlocks(stack).toString(16);
+    return header.bits.toString(16) == dgwBits ? 1 : 0;
+  }
+};
+
+Blockchain.prototype._conv4dgw = function (header){
+  var _this15 = this;
+  return {
+        height: header.height,
+        target: `0x${header.bits.toString(16)}`,
+        timestamp: header.time,
+        dgwBool: _this15._dgwCheck(header)
     }
-}
+};
 
 Blockchain.prototype._addHeader = function (prev, header, cb) {
   var _this14 = this;
   var height = prev.height + 1;
+  var dgwBlock = _this14._conv4dgw(header);
 
-  var block = {
+    var block = {
     height: height,
     hash: header._getHash(),
     header: header,
-      dwgBool: this._dgwCheck(header)
+    dgwBool: dgwBlock.dgwBool
   };
-  var dgwBlock = {
-        height: header.height,
-        target: `0x${header.hashBits}`,
-        timestamp: header.time,
-        dwgBool: _this14._dgwCheck(header)
-    };
+
   // if prev already has a "next" pointer, then this is a fork, so we
   // won't change it to point to this block (yet)
   var link = !prev.next;
 
   var put = function put() {
     var tip = height > _this14.tip.height;
-    _this14._put({ header: header, height: height }, { tip: tip, prev: prev, link: link, dwgBool: header.dgwBool }, function (err) {
+    _this14._put({ header: header, height: height }, { tip: tip, prev: prev, link: link, dgwBool: header.dgwBool }, function (err) {
       if (err) return cb(err);
       _this14.emit('block', block);
       _this14.emit('block:' + block.hash.toString('base64'), block);
@@ -445,7 +459,8 @@ Blockchain.prototype._addHeader = function (prev, header, cb) {
         _this14.emit('tip', block);
       }
 
-        _this14.stack.push(dgwBlock)
+      _this14.stack.push(dgwBlock);
+      if (_this14.stack.length>25) {_this14.stack.shift();}
       cb(null, block);
     });
   };
@@ -458,15 +473,13 @@ Blockchain.prototype._addHeader = function (prev, header, cb) {
     if (err) return cb(err);
     if (!retarget && header.bits !== prev.header.bits) {
 
-        // TODO
-        // return cb(new Error('Unexpected difficulty change at height ' + height), block);
+      // TODO
+      // return cb(new Error('Unexpected difficulty change at height ' + height), block);
 
     }
     _this14.validProof(header, function (err, validProof) {
       if (err) return cb(err);
-      if (!validProof) {
-
-      }
+      if (!validProof) {}
 
       // TODO
       /*
@@ -489,7 +502,9 @@ Blockchain.prototype._addHeader = function (prev, header, cb) {
         })
       }
       */
-
+        if(block.dgwBool===0 && block.height>25) {
+            // console.log(`Block invalid : DGW invalidation at ${header.height}`)
+            return cb(new Error('Block invalid : DGW invalidation'), block)};
       put();
     });
   });
